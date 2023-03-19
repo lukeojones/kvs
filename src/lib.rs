@@ -1,14 +1,19 @@
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
-}
+pub struct KvStore;
+impl KvStore {
+    pub fn new() -> KvStore {
+        panic!("Abort, abort, abort");
+    }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+    pub fn set(&self, key: String, value: String) -> () {
+        println!("Setting '{}' to '{}'", key, value);
+    }
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
+    pub fn get(&self, key: String) -> Option<String> {
+        println!("Getting value for '{}'", key);
+        None
+    }
+
+    pub fn remove(&self, key: String) -> () {
+        println!("Removed value for '{}'", key);
     }
 }
