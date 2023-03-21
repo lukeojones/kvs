@@ -1,11 +1,20 @@
+extern crate exitcode;
+
+use std::io::stderr;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
 fn main() {
-    let args = KvArgs::parse();
+    let args: KvArgs = KvArgs::parse();
     println!("{:?}", args);
 
-    let authors = env!("CARGO_PKG_AUTHORS");
-    println!("{:?}", authors);
+    match args.operation {
+        Operation::Get(_) => {
+            eprint!("unimplemented");
+            std::process::exit(exitcode::CONFIG);
+        }
+        Operation::Set(_) => {}
+        Operation::Remove(_) => {}
+    }
 }
 
 /// Reads and Analyses Files
