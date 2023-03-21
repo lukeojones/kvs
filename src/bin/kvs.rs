@@ -12,8 +12,14 @@ fn main() {
             eprint!("unimplemented");
             std::process::exit(exitcode::CONFIG);
         }
-        Operation::Set(_) => {}
-        Operation::Remove(_) => {}
+        Operation::Set(_) => {
+            eprint!("unimplemented");
+            std::process::exit(exitcode::CONFIG);
+        }
+        Operation::Remove(_) => {
+            eprint!("unimplemented");
+            std::process::exit(exitcode::CONFIG);
+        }
     }
 }
 
