@@ -16,6 +16,13 @@ use std::collections::HashMap;
 pub struct KvStore {
     map: HashMap<String, String>
 }
+
+impl Default for KvStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl KvStore {
     /// Creates a new `KvStore`
     pub fn new() -> KvStore {
@@ -25,7 +32,7 @@ impl KvStore {
     /// Inserts the given value for the given key
     ///
     /// If the key already exists, the previous value will be replaced.
-    pub fn set(&mut self, key: String, value: String) -> () {
+    pub fn set(&mut self, key: String, value: String) {
         println!("Setting '{}' to '{}'", key, value);
         self.map.insert(key, value);
     }
@@ -39,7 +46,7 @@ impl KvStore {
     }
 
     /// Removes the given key.
-    pub fn remove(&mut self, key: String) -> () {
+    pub fn remove(&mut self, key: String) {
         println!("Removed value for '{}'", key);
         self.map.remove(&key);
     }

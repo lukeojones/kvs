@@ -1,6 +1,6 @@
 extern crate exitcode;
 
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap::{Args, Parser, Subcommand};
 
 fn main() {
     let args: KvArgs = KvArgs::parse();
