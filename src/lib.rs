@@ -14,7 +14,7 @@ use std::collections::HashMap;
 /// assert_eq!(val, Some("value".to_owned()));
 /// ```
 pub struct KvStore {
-    map: HashMap<String, String>
+    map: HashMap<String, String>,
 }
 
 impl Default for KvStore {
@@ -26,7 +26,9 @@ impl Default for KvStore {
 impl KvStore {
     /// Creates a new `KvStore`
     pub fn new() -> KvStore {
-        KvStore { map: HashMap::new() }
+        KvStore {
+            map: HashMap::new(),
+        }
     }
 
     /// Inserts the given value for the given key
