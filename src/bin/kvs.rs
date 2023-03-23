@@ -1,6 +1,5 @@
 extern crate exitcode;
 
-use std::io::stderr;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
 fn main() {
