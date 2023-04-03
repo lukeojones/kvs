@@ -1,4 +1,9 @@
 use std::collections::HashMap;
+use std::io::Error;
+use std::path::{PathBuf};
+use std::result;
+
+pub type Result<T> = result::Result<T, Error>;
 
 /// The `KvStore` stores string key/value pairs.
 ///
@@ -34,22 +39,29 @@ impl KvStore {
     /// Inserts the given value for the given key
     ///
     /// If the key already exists, the previous value will be replaced.
-    pub fn set(&mut self, key: String, value: String) {
+    pub fn set(&mut self, key: String, value: String) -> Result<()> {
         println!("Setting '{}' to '{}'", key, value);
         self.map.insert(key, value);
+        Ok(())
     }
 
     /// Gets the string value for a given key.
     ///
     /// Returns `None` if the given key does not exist.
-    pub fn get(&self, key: String) -> Option<String> {
+    pub fn get(&self, key: String) -> Result<Option<String>> {
         println!("Getting value for '{}'", key);
-        self.map.get(&key).cloned()
+        Ok(self.map.get(&key).cloned())
     }
 
     /// Removes the given key.
-    pub fn remove(&mut self, key: String) {
+    pub fn remove(&mut self, key: String) -> Result<()> {
         println!("Removed value for '{}'", key);
         self.map.remove(&key);
+        Ok(())
+    }
+
+    /// Opens a KV Store from disk
+    pub fn open(path: impl Into<PathBuf>) -> Result<KvStore> {
+        panic!("This is ground control to major Tom!")
     }
 }
