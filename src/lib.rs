@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::io::Error;
+use failure::Error;
 use std::path::{PathBuf};
 use std::result;
 

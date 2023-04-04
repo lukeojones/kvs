@@ -11,6 +11,7 @@ rust-version = "1.68"
 [dependencies]
 clap = { version = "4.1.11", features = ["derive"] }
 exitcode = "1.1.2"
+failure = { version = "0.1.8", features = ["derive"] }
 
 [dev-dependencies]
 assert_cmd = "2.0.10"
