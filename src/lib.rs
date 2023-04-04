@@ -1,7 +1,10 @@
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::BufWriter;
 use failure::Error;
 use std::path::{PathBuf};
 use std::result;
+use serde::{Deserialize, Serialize};
 
 pub type Result<T> = result::Result<T, Error>;
 
@@ -20,28 +23,32 @@ pub type Result<T> = result::Result<T, Error>;
 /// ```
 pub struct KvStore {
     map: HashMap<String, String>,
+    writer: File
 }
 
-impl Default for KvStore {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+// impl Default for KvStore {
+//     fn default() -> Self {
+//         Self::new()
+//     }
+// }
 
 impl KvStore {
-    /// Creates a new `KvStore`
-    pub fn new() -> KvStore {
-        KvStore {
-            map: HashMap::new(),
-        }
-    }
+    // /// Creates a new `KvStore`
+    // pub fn new() -> KvStore {
+    //     KvStore {
+    //         map: HashMap::new(),
+    //         writer: file
+    //     }
+    // }
 
     /// Inserts the given value for the given key
     ///
     /// If the key already exists, the previous value will be replaced.
     pub fn set(&mut self, key: String, value: String) -> Result<()> {
-        println!("Setting '{}' to '{}'", key, value);
-        self.map.insert(key, value);
+        // println!("Setting '{}' to '{}'", key, value);
+        let tx = Transaction::Set { key, value };
+        serde_json::to_writer(&self.writer, &tx)?;
+        // self.map.insert(key, value);
         Ok(())
     }
 
@@ -62,6 +69,17 @@ impl KvStore {
 
     /// Opens a KV Store from disk
     pub fn open(path: impl Into<PathBuf>) -> Result<KvStore> {
-        panic!("This is ground control to major Tom!")
+        let path = path.into();
+        let file = File::create(&path).expect(&*format!("Unable to create file"));
+        Ok(KvStore {
+            map: HashMap::new(),
+            writer: file
+        })
     }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub enum Transaction {
+    Set { key: String, value: String},
+    Remove { key: String, value: String},
 }

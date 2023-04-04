@@ -1,20 +1,24 @@
 extern crate exitcode;
 
+use serde::{Deserialize, Serialize};
 use clap::{Args, Parser, Subcommand};
 use kvs::Result;
 
 fn main() -> Result<()> {
     let args: KvArgs = KvArgs::parse();
-    println!("{:?}", args);
+    // println!("{:?}", args);
 
     match args.operation {
         Operation::Get(_) => {
             eprint!("unimplemented");
             std::process::exit(exitcode::CONFIG);
         }
-        Operation::Set(_) => {
-            eprint!("unimplemented");
-            std::process::exit(exitcode::CONFIG);
+        Operation::Set(cmd) => {
+            // eprint!("unimplemented");
+            // println!("The SetCommand is {:?}", cmd);
+            let json = serde_json::to_string(&cmd);
+            // println!("The json is {}", json.unwrap());
+            std::process::exit(exitcode::OK);
         }
         Operation::Remove(_) => {
             eprint!("unimplemented");
@@ -35,26 +39,32 @@ struct KvArgs {
 #[derive(Debug, Subcommand)]
 pub enum Operation {
     /// Get a value by key
-    Get(KeyOnlyCommand),
+    Get(GetCliCommand),
 
     /// Set a value by key
-    Set(KeyAndValueCommand),
+    Set(SetCliCommand),
 
     /// Remove a value by key
     #[clap(name = "rm")]
-    Remove(KeyOnlyCommand),
+    Remove(RemoveCliCommand),
 }
 
-#[derive(Args, Debug)]
-pub struct KeyOnlyCommand {
+#[derive(Args, Debug, Deserialize, Serialize)]
+pub struct GetCliCommand {
     /// Name of key to get value for
     key: String,
 }
 
-#[derive(Args, Debug)]
-pub struct KeyAndValueCommand {
+#[derive(Args, Debug, Deserialize, Serialize)]
+pub struct SetCliCommand {
     /// Name of key to get value for
     key: String,
     /// Value to set for key
     value: String,
+}
+
+#[derive(Args, Debug, Deserialize, Serialize)]
+pub struct RemoveCliCommand {
+    /// Name of key to remove value for
+    key: String,
 }
