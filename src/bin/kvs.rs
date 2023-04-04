@@ -1,8 +1,9 @@
 extern crate exitcode;
 
 use clap::{Args, Parser, Subcommand};
+use kvs::Result;
 
-fn main() {
+fn main() -> Result<()> {
     let args: KvArgs = KvArgs::parse();
     println!("{:?}", args);
 
