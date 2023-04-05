@@ -1,27 +1,35 @@
 extern crate exitcode;
 
+use std::env;
 use serde::{Deserialize, Serialize};
 use clap::{Args, Parser, Subcommand};
-use kvs::Result;
+use kvs::{KvStore, Result};
+use env::current_dir;
 
 fn main() -> Result<()> {
     let args: KvArgs = KvArgs::parse();
-    // println!("{:?}", args);
 
     match args.operation {
-        Operation::Get(_) => {
-            eprint!("unimplemented");
-            std::process::exit(exitcode::CONFIG);
-        }
-        Operation::Set(cmd) => {
-            // eprint!("unimplemented");
-            // println!("The SetCommand is {:?}", cmd);
-            let json = serde_json::to_string(&cmd);
-            // println!("The json is {}", json.unwrap());
+        Operation::Get(cmd) => {
+            let mut store = KvStore::open(current_dir()?)?;
+            if let Some(value) = store.get(cmd.key)? {
+                println!("{}", value);
+            } else {
+                println!("Key not found");
+            }
             std::process::exit(exitcode::OK);
         }
-        Operation::Remove(_) => {
-            eprint!("unimplemented");
+        Operation::Set(cmd) => {
+            let mut store = KvStore::open(current_dir()?)?;
+            store.set(cmd.key, cmd.value)?;
+            std::process::exit(exitcode::OK);
+        }
+        Operation::Remove(cmd) => {
+            let mut store = KvStore::open(current_dir()?)?;
+            if let Ok(_) = store.remove(cmd.key) {
+                std::process::exit(exitcode::OK);
+            }
+            println!("Key not found");
             std::process::exit(exitcode::CONFIG);
         }
     }

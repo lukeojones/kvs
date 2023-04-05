@@ -1,12 +1,15 @@
+mod error;
+
 use std::collections::HashMap;
-use std::fs::File;
+use std::fs::{ File, self };
 use std::io::BufWriter;
 use failure::Error;
 use std::path::{PathBuf};
 use std::result;
 use serde::{Deserialize, Serialize};
+use crate::error::KvsError;
 
-pub type Result<T> = result::Result<T, Error>;
+pub type Result<T> = result::Result<T, KvsError>;
 
 /// The `KvStore` stores string key/value pairs.
 ///
@@ -45,10 +48,9 @@ impl KvStore {
     ///
     /// If the key already exists, the previous value will be replaced.
     pub fn set(&mut self, key: String, value: String) -> Result<()> {
-        // println!("Setting '{}' to '{}'", key, value);
-        let tx = Transaction::Set { key, value };
+        let tx = Transaction::Set { key: key.clone(), value: value.clone() };
         serde_json::to_writer(&self.writer, &tx)?;
-        // self.map.insert(key, value);
+        self.map.insert(key, value);
         Ok(())
     }
 
@@ -56,21 +58,24 @@ impl KvStore {
     ///
     /// Returns `None` if the given key does not exist.
     pub fn get(&self, key: String) -> Result<Option<String>> {
-        println!("Getting value for '{}'", key);
         Ok(self.map.get(&key).cloned())
     }
 
     /// Removes the given key.
     pub fn remove(&mut self, key: String) -> Result<()> {
-        println!("Removed value for '{}'", key);
-        self.map.remove(&key);
-        Ok(())
+        if let Some(value) = self.map.remove(&key) {
+            return Ok(())
+        }
+        Err(KvsError::KeyNotFound)
     }
 
     /// Opens a KV Store from disk
     pub fn open(path: impl Into<PathBuf>) -> Result<KvStore> {
         let path = path.into();
-        let file = File::create(&path).expect(&*format!("Unable to create file"));
+        fs::create_dir_all(&path)?;
+        let log_file = path.join(format!("{}.log", 0));
+        let file = File::create(&log_file).expect(&*format!("Unable to create file"));
+
         Ok(KvStore {
             map: HashMap::new(),
             writer: file
