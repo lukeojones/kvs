@@ -1,9 +1,8 @@
 mod error;
 
 use std::collections::HashMap;
-use std::fs::{ File, self };
-use std::io::BufWriter;
-use failure::Error;
+use std::fs::{ File, self, OpenOptions };
+use std::io::{BufRead, BufReader, Write};
 use std::path::{PathBuf};
 use std::result;
 use serde::{Deserialize, Serialize};
@@ -26,7 +25,12 @@ pub type Result<T> = result::Result<T, KvsError>;
 /// ```
 pub struct KvStore {
     map: HashMap<String, String>,
-    writer: File
+    writer: File,
+    reader: BufReader<File>,
+}
+
+impl KvStore {
+
 }
 
 // impl Default for KvStore {
@@ -48,8 +52,9 @@ impl KvStore {
     ///
     /// If the key already exists, the previous value will be replaced.
     pub fn set(&mut self, key: String, value: String) -> Result<()> {
-        let tx = Command::Set { key: key.clone(), value: value.clone() };
-        serde_json::to_writer(&self.writer, &tx)?;
+        let command = Command::Set { key: key.clone(), value: value.clone() };
+        serde_json::to_writer(&self.writer, &command)?;
+        self.writer.write_all(b"\n")?;
         self.map.insert(key, value);
         Ok(())
     }
@@ -57,13 +62,13 @@ impl KvStore {
     /// Gets the string value for a given key.
     ///
     /// Returns `None` if the given key does not exist.
-    pub fn get(&self, key: String) -> Result<Option<String>> {
+    pub fn get(&mut self, key: String) -> Result<Option<String>> {
         Ok(self.map.get(&key).cloned())
     }
 
     /// Removes the given key.
     pub fn remove(&mut self, key: String) -> Result<()> {
-        if let Some(value) = self.map.remove(&key) {
+        if let Some(_value) = self.map.remove(&key) {
             return Ok(())
         }
         Err(KvsError::KeyNotFound)
@@ -74,17 +79,68 @@ impl KvStore {
         let path = path.into();
         fs::create_dir_all(&path)?;
         let log_file = path.join(format!("{}.log", 0));
-        let file = File::create(&log_file).expect(&*format!("Unable to create file"));
 
-        Ok(KvStore {
+        let writer = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(&log_file)?;
+
+        let reader = BufReader::new(OpenOptions::new()
+            .read(true)
+            .open(&log_file)?);
+
+        let mut store = KvStore {
             map: HashMap::new(),
-            writer: file
-        })
+            writer,
+            reader,
+        };
+
+        KvStore::load(&mut store)?;
+
+        Ok(store)
+    }
+
+    /// Reads the log file and populates the in-memory map
+    /// Need to use read_line here as reader.lines() takes ownership which isn't very useful as it's on the struct
+    pub fn load(store: &mut KvStore) -> Result<()>{
+        // println!("Loading from logfile");
+        let mut line = String::new();
+        while store.reader.read_line(&mut line)? > 0 {
+            let command: Command = serde_json::from_str(&line)?;
+            match command {
+                Command::Set { key, value } => {
+                    // println!("Found SET command with key: {} and value: {}", key, value);
+                    store.map.insert(key, value);
+                },
+                Command::Remove { key } => {
+                    // println!("Found RM command with key: {} ", key);
+                    store.map.remove(&key);
+                }
+            }
+            line.clear();
+        }
+        Ok(())
     }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum Command {
     Set { key: String, value: String},
-    Remove { key: String, value: String},
+    Remove { key: String },
 }
+
+// pub struct TrackingBufWriter {
+//     writer: BufWriter<File>,
+//     offset: u64,
+// }
+//
+// impl Write for TrackingBufWriter {
+//     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+//         self.writer.seek()
+//     }
+//
+//     fn flush(&mut self) -> std::io::Result<()> {
+//         todo!()
+//     }
+// }
