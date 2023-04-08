@@ -12,6 +12,8 @@ pub enum KvsError {
     Serde(#[cause] serde_json::Error),
     #[fail(display = "Key not found")]
     KeyNotFound,
+    #[fail(display = "Unexpected Command Type")]
+    UnexpectedCommandType,
 }
 
 impl From<io::Error> for KvsError {
