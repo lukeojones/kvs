@@ -48,7 +48,7 @@ impl KvStore {
     ///
     /// If the key already exists, the previous value will be replaced.
     pub fn set(&mut self, key: String, value: String) -> Result<()> {
-        let tx = Transaction::Set { key: key.clone(), value: value.clone() };
+        let tx = Command::Set { key: key.clone(), value: value.clone() };
         serde_json::to_writer(&self.writer, &tx)?;
         self.map.insert(key, value);
         Ok(())
@@ -84,7 +84,7 @@ impl KvStore {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub enum Transaction {
+pub enum Command {
     Set { key: String, value: String},
     Remove { key: String, value: String},
 }
