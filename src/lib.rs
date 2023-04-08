@@ -68,7 +68,12 @@ impl KvStore {
 
     /// Removes the given key.
     pub fn remove(&mut self, key: String) -> Result<()> {
-        if let Some(_value) = self.map.remove(&key) {
+        // println!("<<< Removing {} >>>", key);
+        if let Some(value) = self.map.remove(&key) {
+            // println!("<<< Removed {} >>>", value);
+            let command = Command::Remove { key: key.clone() };
+            serde_json::to_writer(&self.writer, &command)?;
+            self.writer.write_all(b"\n")?;
             return Ok(())
         }
         Err(KvsError::KeyNotFound)

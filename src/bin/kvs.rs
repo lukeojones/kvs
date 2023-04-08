@@ -24,6 +24,7 @@ fn main() -> Result<()> {
             std::process::exit(exitcode::OK);
         }
         Operation::Remove(cmd) => {
+            // println!("<<< Removing >>>");
             if let Ok(_) = store.remove(cmd.key) {
                 std::process::exit(exitcode::OK);
             }
