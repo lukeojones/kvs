@@ -8,10 +8,10 @@ use env::current_dir;
 
 fn main() -> Result<()> {
     let args: KvArgs = KvArgs::parse();
+    let mut store = KvStore::open(current_dir()?)?;
 
     match args.operation {
         Operation::Get(cmd) => {
-            let mut store = KvStore::open(current_dir()?)?;
             if let Some(value) = store.get(cmd.key)? {
                 println!("{}", value);
             } else {
@@ -20,12 +20,10 @@ fn main() -> Result<()> {
             std::process::exit(exitcode::OK);
         }
         Operation::Set(cmd) => {
-            let mut store = KvStore::open(current_dir()?)?;
             store.set(cmd.key, cmd.value)?;
             std::process::exit(exitcode::OK);
         }
         Operation::Remove(cmd) => {
-            let mut store = KvStore::open(current_dir()?)?;
             if let Ok(_) = store.remove(cmd.key) {
                 std::process::exit(exitcode::OK);
             }
