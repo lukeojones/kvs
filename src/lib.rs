@@ -2,7 +2,7 @@ mod error;
 
 use std::collections::HashMap;
 use std::fs::{ File, self, OpenOptions };
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, BufWriter, Seek, SeekFrom, Write};
 use std::path::{PathBuf};
 use std::result;
 use serde::{Deserialize, Serialize};
@@ -30,23 +30,6 @@ pub struct KvStore {
 }
 
 impl KvStore {
-
-}
-
-// impl Default for KvStore {
-//     fn default() -> Self {
-//         Self::new()
-//     }
-// }
-
-impl KvStore {
-    // /// Creates a new `KvStore`
-    // pub fn new() -> KvStore {
-    //     KvStore {
-    //         map: HashMap::new(),
-    //         writer: file
-    //     }
-    // }
 
     /// Inserts the given value for the given key
     ///
@@ -135,17 +118,33 @@ pub enum Command {
     Remove { key: String },
 }
 
-// pub struct TrackingBufWriter {
-//     writer: BufWriter<File>,
-//     offset: u64,
-// }
-//
-// impl Write for TrackingBufWriter {
-//     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-//         self.writer.seek()
-//     }
-//
-//     fn flush(&mut self) -> std::io::Result<()> {
-//         todo!()
-//     }
-// }
+pub struct TrackingBufWriter<W: Write + Seek> {
+    writer: BufWriter<W>,
+    pos: u64,
+}
+
+impl<W: Write + Seek> TrackingBufWriter<W> {
+    fn new(mut inner: W) -> Result<Self> {
+        let pos = inner.seek(SeekFrom::Current(0))?;
+        Ok(TrackingBufWriter { writer: BufWriter::new(inner), pos })
+    }
+}
+
+impl<W: Write + Seek> Write for TrackingBufWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let bytes_written = self.writer.write(buf)?;
+        self.pos += bytes_written as u64;
+        Ok(bytes_written)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.writer.flush()
+    }
+}
+
+impl<W: Write + Seek> Seek for TrackingBufWriter<W> {
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        let pos = self.writer.seek(pos)?;
+        Ok(pos)
+    }
+}
