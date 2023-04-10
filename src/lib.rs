@@ -61,11 +61,11 @@ impl KvStore {
                     Ok(Some(value))
                 }
                 Command::Remove { .. } => {
-                    panic!("Not implemented yet!");
+                    Ok(None)
                 }
             }
         }
-        Ok(Some("Bogus22".to_string()))
+        Ok(None)
     }
 
     /// Removes the given key.
@@ -73,9 +73,12 @@ impl KvStore {
         // println!("<<< Removing {} >>>", key);
         if let Some(value) = self.map.remove(&key) {
             // println!("<<< Removed {} >>>", value);
+            let pos_start = self.writer.pos;
             let command = Command::Remove { key: key.clone() };
             serde_json::to_writer(&mut self.writer, &command)?;
             self.writer.write_all(b"\n")?;
+            self.writer.flush()?;
+            self.map.remove(&key);
             return Ok(())
         }
         Err(KvsError::KeyNotFound)
@@ -155,12 +158,12 @@ impl<W: Write + Seek> TrackingBufWriter<W> {
 
 impl<W: Write + Seek> Write for TrackingBufWriter<W> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        println!("<<< Writing to writer >>>");
-        println!("<<< Current pos: {} >>>", self.pos);
+        // println!("<<< Writing to writer >>>");
+        // println!("<<< Current pos: {} >>>", self.pos);
         let bytes_written = self.writer.write(buf)?;
-        println!("<<< Bytes written: {} >>>", bytes_written);
+        // println!("<<< Bytes written: {} >>>", bytes_written);
         self.pos += bytes_written as u64;
-        println!("<<< Current pos: {} >>>", self.pos);
+        // println!("<<< Current pos: {} >>>", self.pos);
         Ok(bytes_written)
     }
 
