@@ -24,21 +24,24 @@ pub type Result<T> = result::Result<T, KvsError>;
 /// assert_eq!(val, Some("value".to_owned()));
 /// ```
 pub struct KvStore {
-    map: HashMap<String, String>,
-    writer: File,
+    // map: HashMap<String, String>,
+    map: HashMap<String, LogSection>,
+    writer: TrackingBufWriter<File>,
     reader: BufReader<File>,
 }
 
 impl KvStore {
 
-    /// Inserts the given value for the given key
+    /// Inserts the given file position for the given key
     ///
-    /// If the key already exists, the previous value will be replaced.
+    /// If the key already exists, the previous position will be replaced.
     pub fn set(&mut self, key: String, value: String) -> Result<()> {
+        let pos_start = self.writer.pos;
         let command = Command::Set { key: key.clone(), value: value.clone() };
-        serde_json::to_writer(&self.writer, &command)?;
+        serde_json::to_writer(&mut self.writer, &command)?;
         self.writer.write_all(b"\n")?;
-        self.map.insert(key, value);
+        self.writer.flush()?;
+        self.map.insert(key, (pos_start, self.writer.pos).into());
         Ok(())
     }
 
@@ -46,7 +49,8 @@ impl KvStore {
     ///
     /// Returns `None` if the given key does not exist.
     pub fn get(&mut self, key: String) -> Result<Option<String>> {
-        Ok(self.map.get(&key).cloned())
+        // Ok(self.map.get(&key).cloned())
+        Ok(Some("Bogus".to_string()))
     }
 
     /// Removes the given key.
@@ -55,7 +59,7 @@ impl KvStore {
         if let Some(value) = self.map.remove(&key) {
             // println!("<<< Removed {} >>>", value);
             let command = Command::Remove { key: key.clone() };
-            serde_json::to_writer(&self.writer, &command)?;
+            serde_json::to_writer(&mut self.writer, &command)?;
             self.writer.write_all(b"\n")?;
             return Ok(())
         }
@@ -68,11 +72,12 @@ impl KvStore {
         fs::create_dir_all(&path)?;
         let log_file = path.join(format!("{}.log", 0));
 
-        let writer = OpenOptions::new()
+        let writer = TrackingBufWriter::new(
+            OpenOptions::new()
             .create(true)
             .write(true)
             .append(true)
-            .open(&log_file)?;
+            .open(&log_file)?)?;
 
         let reader = BufReader::new(OpenOptions::new()
             .read(true)
@@ -84,7 +89,7 @@ impl KvStore {
             reader,
         };
 
-        KvStore::load(&mut store)?;
+        // KvStore::load(&mut store)?;
 
         Ok(store)
     }
@@ -93,21 +98,23 @@ impl KvStore {
     /// Need to use read_line here as reader.lines() takes ownership which isn't very useful as it's on the struct
     pub fn load(store: &mut KvStore) -> Result<()>{
         // println!("Loading from logfile");
-        let mut line = String::new();
-        while store.reader.read_line(&mut line)? > 0 {
-            let command: Command = serde_json::from_str(&line)?;
-            match command {
-                Command::Set { key, value } => {
-                    // println!("Found SET command with key: {} and value: {}", key, value);
-                    store.map.insert(key, value);
-                },
-                Command::Remove { key } => {
-                    // println!("Found RM command with key: {} ", key);
-                    store.map.remove(&key);
-                }
-            }
-            line.clear();
-        }
+        // todo!("Will need to use tracked reader here");
+        // let mut line = String::new();
+        // while store.reader.read_line(&mut line)? > 0 {
+        //     let command: Command = serde_json::from_str(&line)?;
+        //     match command {
+        //         Command::Set { key, value } => {
+        //             // println!("Found SET command with key: {} and value: {}", key, value);
+        //             // store.map.insert(key, value);
+        //             store.map.insert(key, value);
+        //         },
+        //         Command::Remove { key } => {
+        //             // println!("Found RM command with key: {} ", key);
+        //             store.map.remove(&key);
+        //         }
+        //     }
+        //     line.clear();
+        // }
         Ok(())
     }
 }
@@ -125,6 +132,7 @@ pub struct TrackingBufWriter<W: Write + Seek> {
 
 impl<W: Write + Seek> TrackingBufWriter<W> {
     fn new(mut inner: W) -> Result<Self> {
+        println!("<<< Creating new writer >>>");
         let pos = inner.seek(SeekFrom::Current(0))?;
         Ok(TrackingBufWriter { writer: BufWriter::new(inner), pos })
     }
@@ -132,8 +140,12 @@ impl<W: Write + Seek> TrackingBufWriter<W> {
 
 impl<W: Write + Seek> Write for TrackingBufWriter<W> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        println!("<<< Writing to writer >>>");
+        println!("<<< Current pos: {} >>>", self.pos);
         let bytes_written = self.writer.write(buf)?;
+        println!("<<< Bytes written: {} >>>", bytes_written);
         self.pos += bytes_written as u64;
+        println!("<<< Current pos: {} >>>", self.pos);
         Ok(bytes_written)
     }
 
@@ -146,5 +158,17 @@ impl<W: Write + Seek> Seek for TrackingBufWriter<W> {
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
         let pos = self.writer.seek(pos)?;
         Ok(pos)
+    }
+}
+
+#[derive(Debug)]
+struct LogSection {
+    start: u64,
+    length: u64,
+}
+
+impl From<(u64, u64)> for LogSection {
+    fn from((start, end): (u64, u64)) -> Self {
+        LogSection { start, length: end - start}
     }
 }
