@@ -1,3 +1,4 @@
+use std::env::current_dir;
 use assert_cmd::prelude::*;
 use kvs::{KvStore, Result};
 use predicates::ord::eq;
@@ -218,6 +219,8 @@ fn get_stored_value_memory() -> Result<()> {
 fn overwrite_value() -> Result<()> {
     let temp_dir = TempDir::new().expect("unable to create temporary working directory");
     let mut store = KvStore::open(temp_dir.path())?;
+    // let temp_dir_path = current_dir()?;
+    // let mut store = KvStore::open(&temp_dir_path)?;
 
     store.set("key1".to_owned(), "value1".to_owned())?;
     assert_eq!(store.get("key1".to_owned())?, Some("value1".to_owned()));
@@ -227,6 +230,7 @@ fn overwrite_value() -> Result<()> {
     // Open from disk again and check persistent data.
     drop(store);
     let mut store = KvStore::open(temp_dir.path())?;
+    // let mut store = KvStore::open(temp_dir_path)?;
     assert_eq!(store.get("key1".to_owned())?, Some("value2".to_owned()));
     store.set("key1".to_owned(), "value3".to_owned())?;
     assert_eq!(store.get("key1".to_owned())?, Some("value3".to_owned()));
