@@ -2,7 +2,7 @@ mod error;
 
 use std::collections::HashMap;
 use std::fs::{ File, self, OpenOptions };
-use std::io::{BufRead, BufReader, BufWriter, Seek, SeekFrom, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{PathBuf};
 use std::result;
 use serde::{Deserialize, Serialize};
@@ -49,8 +49,23 @@ impl KvStore {
     ///
     /// Returns `None` if the given key does not exist.
     pub fn get(&mut self, key: String) -> Result<Option<String>> {
-        // Ok(self.map.get(&key).cloned())
-        Ok(Some("Bogus".to_string()))
+        if let Some(log_section) = self.map.get(&key) {
+            println!("Found LogSection: {:?}", log_section);
+            self.reader.seek(SeekFrom::Start(log_section.start))?;
+            let mut buffer = vec![0; log_section.length as usize];
+            self.reader.read_exact(&mut buffer)?;
+            let command: Command = serde_json::from_slice(&buffer)?;
+            return match command {
+                Command::Set { value, .. } => {
+                    println!("There is a set command here with value {}", value);
+                    Ok(Some(value))
+                }
+                Command::Remove { .. } => {
+                    panic!("Not implemented yet!");
+                }
+            }
+        }
+        Ok(Some("Bogus22".to_string()))
     }
 
     /// Removes the given key.
