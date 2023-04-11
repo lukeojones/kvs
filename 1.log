@@ -2,3 +2,4 @@
 {"Set":{"key":"luke","value":"jones"}}
 {"Set":{"key":"luke","value":"nojes"}}
 {"Set":{"key":"rebecca","value":"nojes"}}
+{"Remove":{"key":"luke"}}

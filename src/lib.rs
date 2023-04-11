@@ -1,10 +1,12 @@
 mod error;
 
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::fs::{ File, self, OpenOptions };
 use std::io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
-use std::path::{PathBuf};
+use std::path::{Path, PathBuf};
 use std::result;
+use clap::builder::TypedValueParser;
 use serde::{Deserialize, Serialize};
 use crate::error::KvsError;
 
@@ -90,6 +92,13 @@ impl KvStore {
     pub fn open(path: impl Into<PathBuf>) -> Result<KvStore> {
         let path = path.into();
         fs::create_dir_all(&path)?;
+        let generations = sorted_log_generations(&path)?;
+
+        let mut readers: HashMap<String, BufReader<File>> = HashMap::new();
+        for generation in generations {
+            println!("Generation [{}]", generation)
+        }
+
         let log_file = path.join(format!("{}.log", 0));
 
         let writer = TrackingBufWriter::new(
@@ -137,6 +146,25 @@ impl KvStore {
         }
         Ok(())
     }
+}
+
+pub fn sorted_log_generations<P: AsRef<Path>>(path: P) -> Result<Vec<u64>> {
+    let mut log_files = fs::read_dir(path)?
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| entry.path().is_file()
+            && entry.path().extension() == Some("log".as_ref()))
+        .filter_map(|entry| {
+            entry
+                .path()
+                .file_stem()
+                .map(|os_str| os_str.to_os_string())
+                .and_then(|os_str| os_str.into_string().ok())
+        })
+        .filter_map(|s| s.parse().ok())
+        .collect::<Vec<u64>>();
+
+    log_files.sort_unstable();
+    Ok(log_files)
 }
 
 #[derive(Debug, Deserialize, Serialize)]
