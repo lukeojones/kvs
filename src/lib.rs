@@ -1,7 +1,6 @@
 mod error;
 
 use std::collections::HashMap;
-use std::ffi::OsStr;
 use std::fs::{ File, self, OpenOptions };
 use std::io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
@@ -94,12 +93,19 @@ impl KvStore {
         fs::create_dir_all(&path)?;
         let generations = sorted_log_generations(&path)?;
 
-        let mut readers: HashMap<String, BufReader<File>> = HashMap::new();
-        for generation in generations {
-            println!("Generation [{}]", generation)
+        let mut readers: HashMap<u64, TrackingBufReader<File>> = HashMap::new();
+        for &gen in &generations {
+            let old_log_file = log_file_path(&path, gen);
+            let old_gen_reader = TrackingBufReader::new(
+                OpenOptions::new()
+                    .read(true)
+                    .open(&old_log_file)?)?;
+
+            readers.insert(gen, old_gen_reader);
         }
 
-        let log_file = path.join(format!("{}.log", 0));
+        let current_gen = generations.last().unwrap_or(&0) + 1;
+        let log_file = log_file_path(&path, current_gen);
 
         let writer = TrackingBufWriter::new(
             OpenOptions::new()
@@ -111,6 +117,7 @@ impl KvStore {
         let reader = TrackingBufReader::new(OpenOptions::new()
             .read(true)
             .open(&log_file)?)?;
+        //todo - Do I need to put this in the readers too?
 
         let mut store = KvStore {
             map: HashMap::new(),
@@ -122,6 +129,8 @@ impl KvStore {
 
         Ok(store)
     }
+
+
 
     /// Reads the log file and populates the in-memory map
     /// Need to use read_line here as reader.lines() takes ownership which isn't very useful as it's on the struct
@@ -146,6 +155,10 @@ impl KvStore {
         }
         Ok(())
     }
+}
+
+pub fn log_file_path(path: &PathBuf, generation: u64) -> PathBuf {
+    path.join(format!("{}.log", generation))
 }
 
 pub fn sorted_log_generations<P: AsRef<Path>>(path: P) -> Result<Vec<u64>> {
