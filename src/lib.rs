@@ -26,9 +26,10 @@ pub type Result<T> = result::Result<T, KvsError>;
 /// ```
 pub struct KvStore {
     // map: HashMap<String, String>,
+    gen: u64,
     map: HashMap<String, LogSection>,
     writer: TrackingBufWriter<File>,
-    reader: TrackingBufReader<File>,
+    readers: HashMap<u64,TrackingBufReader<File>>,
 }
 
 impl KvStore {
@@ -44,7 +45,7 @@ impl KvStore {
         self.writer.write_all(b"\n")?;
         self.writer.flush()?;
         // println!("Writing Set Command FINISH position: {}", self.writer.pos);
-        self.map.insert(key, (pos_start, self.writer.pos).into());
+        self.map.insert(key, (self.gen, pos_start, self.writer.pos).into());
         Ok(())
     }
 
@@ -54,9 +55,10 @@ impl KvStore {
     pub fn get(&mut self, key: String) -> Result<Option<String>> {
         if let Some(log_section) = self.map.get(&key) {
             // println!("Found LogSection: {:?}", log_section);
-            self.reader.seek(SeekFrom::Start(log_section.start))?;
+            let mut reader = self.readers.get_mut(&log_section.gen).unwrap();
+            reader.seek(SeekFrom::Start(log_section.start))?;
             let mut buffer = vec![0; log_section.length as usize];
-            self.reader.read_exact(&mut buffer)?;
+            reader.read_exact(&mut buffer)?;
             let command: Command = serde_json::from_slice(&buffer)?;
             return match command {
                 Command::Set { value, .. } => {
@@ -93,14 +95,16 @@ impl KvStore {
         fs::create_dir_all(&path)?;
         let generations = sorted_log_generations(&path)?;
 
+        let mut index = HashMap::new();
         let mut readers: HashMap<u64, TrackingBufReader<File>> = HashMap::new();
         for &gen in &generations {
             let old_log_file = log_file_path(&path, gen);
-            let old_gen_reader = TrackingBufReader::new(
+            let mut old_gen_reader = TrackingBufReader::new(
                 OpenOptions::new()
                     .read(true)
                     .open(&old_log_file)?)?;
 
+            KvStore::load(&mut index, &mut old_gen_reader, gen)?;
             readers.insert(gen, old_gen_reader);
         }
 
@@ -120,37 +124,34 @@ impl KvStore {
         //todo - Do I need to put this in the readers too?
 
         let mut store = KvStore {
-            map: HashMap::new(),
+            gen: current_gen,
+            map: index,
             writer,
-            reader,
+            readers,
         };
-
-        KvStore::load(&mut store)?;
 
         Ok(store)
     }
 
-
-
     /// Reads the log file and populates the in-memory map
     /// Need to use read_line here as reader.lines() takes ownership which isn't very useful as it's on the struct
-    pub fn load(store: &mut KvStore) -> Result<()>{
+    pub fn load(index: &mut HashMap<String, LogSection>, reader: &mut TrackingBufReader<File>, gen: u64) -> Result<()>{
         // println!("Loading from logfile");
         let mut line = String::new();
         let mut pos = 0 as u64;
-        while store.reader.read_line(&mut line)? > 0 {
+        while reader.read_line(&mut line)? > 0 {
             let command: Command = serde_json::from_str(&line)?;
             match command {
                 Command::Set { key, value } => {
                     // println!("Found SET command with key: {} and value: {}", key, value);
-                    store.map.insert(key, LogSection::new(pos, store.reader.pos));
+                    index.insert(key, LogSection::new(gen,pos, reader.pos));
                 },
                 Command::Remove { key } => {
                     // println!("Found RM command with key: {} ", key);
-                    store.map.remove(&key);
+                    index.remove(&key);
                 }
             }
-            pos = store.reader.pos;
+            pos = reader.pos;
             line.clear();
         }
         Ok(())
@@ -257,19 +258,20 @@ impl<R: Read + Seek> Seek for TrackingBufReader<R> {
 }
 
 #[derive(Debug)]
-struct LogSection {
+pub struct LogSection {
+    gen: u64,
     start: u64,
     length: u64,
 }
 
 impl LogSection {
-    fn new(start: u64, end: u64) -> Self {
-        LogSection { start, length: end - start }
+    fn new(gen: u64, start: u64, end: u64) -> Self {
+        LogSection { gen, start, length: end - start }
     }
 }
 
-impl From<(u64, u64)> for LogSection {
-    fn from((start, end): (u64, u64)) -> Self {
-        LogSection { start, length: end - start}
+impl From<(u64, u64, u64)> for LogSection {
+    fn from((gen, start, end): (u64, u64, u64)) -> Self {
+        LogSection { gen, start, length: end - start}
     }
 }
