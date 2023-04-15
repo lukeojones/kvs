@@ -28,11 +28,11 @@ pub type Result<T> = result::Result<T, KvsError>;
 /// # }
 /// ```
 pub struct KvStore {
-    // map: HashMap<String, String>,
     gen: u64,
     map: HashMap<String, LogSection>,
     writer: TrackingBufWriter<File>,
     readers: HashMap<u64,TrackingBufReader<File>>,
+    compactable: u64,
 }
 
 impl KvStore {
@@ -47,7 +47,12 @@ impl KvStore {
         self.writer.write_all(b"\n")?;
         self.writer.flush()?;
         // println!("Writing Set Command FINISH position: {}", self.writer.pos);
-        self.map.insert(key, (self.gen, pos_start, self.writer.pos).into());
+        let mut compactable: u64 = 0;
+        let key_for_log = key.clone();
+        if let Some(section) = self.map.insert(key, (self.gen, pos_start, self.writer.pos).into()) {
+            println!("Able to reclaim: {} for key [{}]", section.length, key_for_log);
+            self.compactable += section.length
+        }
         Ok(())
     }
 
@@ -88,7 +93,10 @@ impl KvStore {
             serde_json::to_writer(&mut self.writer, &command)?;
             self.writer.write_all(b"\n")?;
             self.writer.flush()?;
-            self.map.remove(&key);
+            if let Some(section) = self.map.remove(&key) {
+                // println!("Able to reclaim: {} for key [{}]", section.length, &key);
+                self.compactable += section.length
+            }
             return Ok(())
         }
         Err(KvsError::KeyNotFound)
@@ -102,10 +110,11 @@ impl KvStore {
 
         let mut index = HashMap::new();
         let mut readers: HashMap<u64, TrackingBufReader<File>> = HashMap::new();
+        let mut compactable= 0;
         for &gen in &generations {
             let old_log_file = log_file_path(&path, gen);
             let mut old_gen_reader = create_reader(&old_log_file)?;
-            load(&mut index, &mut old_gen_reader, gen)?;
+            compactable += load(&mut index, &mut old_gen_reader, gen)?;
             readers.insert(gen, old_gen_reader);
         }
 
@@ -115,11 +124,13 @@ impl KvStore {
         let reader= create_reader(&log_file)?;
         readers.insert(current_gen, reader);
 
+        // println!("Total compactable bytes is [{}]", &compactable);
         let store = KvStore {
             gen: current_gen,
             map: index,
             writer,
             readers,
+            compactable
         };
 
         Ok(store)
@@ -169,26 +180,32 @@ pub fn sorted_log_generations<P: AsRef<Path>>(path: P) -> Result<Vec<u64>> {
 
 /// Reads the log file and populates the in-memory map
 /// Need to use read_line here as reader.lines() takes ownership which isn't very useful as it's on the struct
-pub fn load(index: &mut HashMap<String, LogSection>, reader: &mut TrackingBufReader<File>, gen: u64) -> Result<()>{
+pub fn load(index: &mut HashMap<String, LogSection>, reader: &mut TrackingBufReader<File>, gen: u64) -> Result<u64>{
     // println!("Loading from logfile");
     let mut line = String::new();
     let mut pos = 0 as u64;
+    let mut compactable: u64 = 0;
     while reader.read_line(&mut line)? > 0 {
         let command: Command = serde_json::from_str(&line)?;
         match command {
             Command::Set { key, value: _ } => {
                 // println!("Found SET command with key: {} and value: {}", key, value);
-                index.insert(key, LogSection::new(gen,pos, reader.pos));
+                if let Some(old_section) = index.insert(key, LogSection::new(gen,pos, reader.pos)) {
+                    compactable += old_section.length;
+                }
             },
             Command::Remove { key } => {
                 // println!("Found RM command with key: {} ", key);
-                index.remove(&key);
+                if let Some(old_section) = index.remove(&key) {
+                    compactable += old_section.length;
+                }
+                compactable += reader.pos - pos; // The rm command can also be removed during compaction as absence === final removal
             }
         }
         pos = reader.pos;
         line.clear();
     }
-    Ok(())
+    Ok(compactable)
 }
 
 #[derive(Debug, Deserialize, Serialize)]
