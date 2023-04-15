@@ -36,11 +36,6 @@ pub struct KvStore {
 }
 
 impl KvStore {
-
-    pub fn new() {
-
-    }
-
     /// Inserts the given file position for the given key
     ///
     /// If the key already exists, the previous position will be replaced.
@@ -109,29 +104,15 @@ impl KvStore {
         let mut readers: HashMap<u64, TrackingBufReader<File>> = HashMap::new();
         for &gen in &generations {
             let old_log_file = log_file_path(&path, gen);
-            let mut old_gen_reader = TrackingBufReader::new(
-                OpenOptions::new()
-                    .read(true)
-                    .open(&old_log_file)?)?;
-
+            let mut old_gen_reader = create_reader(&old_log_file)?;
             load(&mut index, &mut old_gen_reader, gen)?;
             readers.insert(gen, old_gen_reader);
         }
 
         let current_gen = generations.last().unwrap_or(&0) + 1;
         let log_file = log_file_path(&path, current_gen);
-
-        let writer = TrackingBufWriter::new(
-            OpenOptions::new()
-            .create(true)
-            .write(true)
-            .append(true)
-            .open(&log_file)?)?;
-
-        let reader = TrackingBufReader::new(
-                        OpenOptions::new()
-                            .read(true)
-                            .open(&log_file)?)?;
+        let writer = create_writer(&log_file)?;
+        let reader= create_reader(&log_file)?;
         readers.insert(current_gen, reader);
 
         let store = KvStore {
@@ -147,6 +128,24 @@ impl KvStore {
 
 pub fn log_file_path(path: &PathBuf, generation: u64) -> PathBuf {
     path.join(format!("{}.log", generation))
+}
+
+pub fn create_reader(old_log_file: &PathBuf) -> Result<TrackingBufReader<File>> {
+    let mut old_gen_reader = TrackingBufReader::new(
+        OpenOptions::new()
+            .read(true)
+            .open(&old_log_file)?)?;
+    Ok(old_gen_reader)
+}
+
+pub fn create_writer(new_log_file: &PathBuf) -> Result<TrackingBufWriter<File>> {
+    let writer = TrackingBufWriter::new(
+        OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(&new_log_file)?)?;
+    Ok(writer)
 }
 
 pub fn sorted_log_generations<P: AsRef<Path>>(path: P) -> Result<Vec<u64>> {
