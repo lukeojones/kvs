@@ -1,4 +1,3 @@
-use std::env::current_dir;
 use assert_cmd::prelude::*;
 use kvs::{KvStore, Result};
 use predicates::ord::eq;

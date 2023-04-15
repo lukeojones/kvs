@@ -5,7 +5,6 @@ use std::fs::{ File, self, OpenOptions };
 use std::io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::result;
-use clap::builder::TypedValueParser;
 use serde::{Deserialize, Serialize};
 use crate::error::KvsError;
 
@@ -18,11 +17,15 @@ pub type Result<T> = result::Result<T, KvsError>;
 /// Example:
 ///
 /// ```rust
-/// # use kvs::KvStore;
-/// let mut store = KvStore::new();
-/// store.set("key".to_owned(), "value".to_owned());
-/// let val = store.get("key".to_owned());
+/// # use kvs::{KvStore, Result};
+/// # fn try_main() -> Result<()> {
+/// use std::env::current_dir;
+/// let mut store = KvStore::open(current_dir()?)?;
+/// store.set("key".to_owned(), "value".to_owned())?;
+/// let val = store.get("key".to_owned())?;
 /// assert_eq!(val, Some("value".to_owned()));
+/// # Ok(())
+/// # }
 /// ```
 pub struct KvStore {
     // map: HashMap<String, String>,
@@ -33,6 +36,10 @@ pub struct KvStore {
 }
 
 impl KvStore {
+
+    pub fn new() {
+
+    }
 
     /// Inserts the given file position for the given key
     ///
@@ -55,7 +62,10 @@ impl KvStore {
     pub fn get(&mut self, key: String) -> Result<Option<String>> {
         if let Some(log_section) = self.map.get(&key) {
             // println!("Found LogSection: {:?}", log_section);
-            let mut reader = self.readers.get_mut(&log_section.gen).unwrap();
+            let reader = self.readers
+                .get_mut(&log_section.gen)
+                .ok_or(KvsError::ReaderNotFound)?;
+
             reader.seek(SeekFrom::Start(log_section.start))?;
             let mut buffer = vec![0; log_section.length as usize];
             reader.read_exact(&mut buffer)?;
@@ -104,7 +114,7 @@ impl KvStore {
                     .read(true)
                     .open(&old_log_file)?)?;
 
-            KvStore::load(&mut index, &mut old_gen_reader, gen)?;
+            load(&mut index, &mut old_gen_reader, gen)?;
             readers.insert(gen, old_gen_reader);
         }
 
@@ -118,12 +128,13 @@ impl KvStore {
             .append(true)
             .open(&log_file)?)?;
 
-        let reader = TrackingBufReader::new(OpenOptions::new()
-            .read(true)
-            .open(&log_file)?)?;
-        //todo - Do I need to put this in the readers too?
+        let reader = TrackingBufReader::new(
+                        OpenOptions::new()
+                            .read(true)
+                            .open(&log_file)?)?;
+        readers.insert(current_gen, reader);
 
-        let mut store = KvStore {
+        let store = KvStore {
             gen: current_gen,
             map: index,
             writer,
@@ -131,30 +142,6 @@ impl KvStore {
         };
 
         Ok(store)
-    }
-
-    /// Reads the log file and populates the in-memory map
-    /// Need to use read_line here as reader.lines() takes ownership which isn't very useful as it's on the struct
-    pub fn load(index: &mut HashMap<String, LogSection>, reader: &mut TrackingBufReader<File>, gen: u64) -> Result<()>{
-        // println!("Loading from logfile");
-        let mut line = String::new();
-        let mut pos = 0 as u64;
-        while reader.read_line(&mut line)? > 0 {
-            let command: Command = serde_json::from_str(&line)?;
-            match command {
-                Command::Set { key, value } => {
-                    // println!("Found SET command with key: {} and value: {}", key, value);
-                    index.insert(key, LogSection::new(gen,pos, reader.pos));
-                },
-                Command::Remove { key } => {
-                    // println!("Found RM command with key: {} ", key);
-                    index.remove(&key);
-                }
-            }
-            pos = reader.pos;
-            line.clear();
-        }
-        Ok(())
     }
 }
 
@@ -179,6 +166,30 @@ pub fn sorted_log_generations<P: AsRef<Path>>(path: P) -> Result<Vec<u64>> {
 
     log_files.sort_unstable();
     Ok(log_files)
+}
+
+/// Reads the log file and populates the in-memory map
+/// Need to use read_line here as reader.lines() takes ownership which isn't very useful as it's on the struct
+pub fn load(index: &mut HashMap<String, LogSection>, reader: &mut TrackingBufReader<File>, gen: u64) -> Result<()>{
+    // println!("Loading from logfile");
+    let mut line = String::new();
+    let mut pos = 0 as u64;
+    while reader.read_line(&mut line)? > 0 {
+        let command: Command = serde_json::from_str(&line)?;
+        match command {
+            Command::Set { key, value: _ } => {
+                // println!("Found SET command with key: {} and value: {}", key, value);
+                index.insert(key, LogSection::new(gen,pos, reader.pos));
+            },
+            Command::Remove { key } => {
+                // println!("Found RM command with key: {} ", key);
+                index.remove(&key);
+            }
+        }
+        pos = reader.pos;
+        line.clear();
+    }
+    Ok(())
 }
 
 #[derive(Debug, Deserialize, Serialize)]
