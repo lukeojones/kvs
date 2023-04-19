@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::KvsError;
 
 pub type Result<T> = result::Result<T, KvsError>;
+const COMPACTION_THRESHOLD: u64 = 1024 * 1024;
 
 /// The `KvStore` stores string key/value pairs.
 ///
@@ -50,9 +51,14 @@ impl KvStore {
         let mut compactable: u64 = 0;
         let key_for_log = key.clone();
         if let Some(section) = self.map.insert(key, (self.gen, pos_start, self.writer.pos).into()) {
-            println!("Able to reclaim: {} for key [{}]", section.length, key_for_log);
+            // println!("Able to reclaim: {} for key [{}]", section.length, key_for_log);
             self.compactable += section.length
         }
+
+        if self.compactable > COMPACTION_THRESHOLD {
+            self.compact();
+        }
+
         Ok(())
     }
 
@@ -97,6 +103,11 @@ impl KvStore {
                 // println!("Able to reclaim: {} for key [{}]", section.length, &key);
                 self.compactable += section.length
             }
+
+            if self.compactable > COMPACTION_THRESHOLD {
+                self.compact();
+            }
+
             return Ok(())
         }
         Err(KvsError::KeyNotFound)
@@ -114,7 +125,9 @@ impl KvStore {
         for &gen in &generations {
             let old_log_file = log_file_path(&path, gen);
             let mut old_gen_reader = create_reader(&old_log_file)?;
-            compactable += load(&mut index, &mut old_gen_reader, gen)?;
+            let compactable_in_gen = load(&mut index, &mut old_gen_reader, gen)?;
+            compactable += compactable_in_gen;
+            // println!("Compactable for gen {} was {}", &gen, &compactable_in_gen);
             readers.insert(gen, old_gen_reader);
         }
 
@@ -134,6 +147,16 @@ impl KvStore {
         };
 
         Ok(store)
+    }
+    fn compact(&mut self) {
+        println!("<<< Running compaction! >>>");
+        // (a) create writer for current_gen + 1
+
+        // (b) move current_gen to + 2
+        // (c) iterate through index and write everything to (a)
+        // (d) delete files older than (a) and remove from readers map
+
+        self.compactable = 0;
     }
 }
 
